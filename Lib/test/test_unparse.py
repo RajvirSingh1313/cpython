@@ -149,6 +149,27 @@ class UnparseTestCase(ASTTestCase):
     # Tests for specific bugs found in earlier versions of unparse
 
     def test_fstrings(self):
+        self.check_ast_roundtrip("f'a'")
+        self.check_ast_roundtrip("f'{{}}'")
+        self.check_ast_roundtrip("f'{{5}}'")
+        self.check_ast_roundtrip("f'{{5}}5'")
+        self.check_ast_roundtrip("f'X{{}}X'")
+        self.check_ast_roundtrip("f'{a}'")
+        self.check_ast_roundtrip("f'{ {1:2}}'")
+        self.check_ast_roundtrip("f'a{a}a'")
+        self.check_ast_roundtrip("f'a{a}{a}a'")
+        self.check_ast_roundtrip("f'a{a}a{a}a'")
+        self.check_ast_roundtrip("f'{a!r}x{a!s}12{{}}{a!a}'")
+        self.check_ast_roundtrip("f'{a:10}'")
+        self.check_ast_roundtrip("f'{a:100_000{10}}'")
+        self.check_ast_roundtrip("f'{a!r:10}'")
+        self.check_ast_roundtrip("f'{a:a{b}10}'")
+        self.check_ast_roundtrip(
+                "f'a{b}{c!s}{d!r}{e!a}{f:a}{g:a{b}}{h!s:a}"
+                "{j!s:{a}b}{k!s:a{b}c}{l!a:{b}c{d}}{x+y=}'"
+        )
+
+    def test_fstrings_special_chars(self):
         # See issue 25180
         self.check_ast_roundtrip(r"""f'{f"{0}"*3}'""")
         self.check_ast_roundtrip(r"""f'{f"{y}"*3}'""")
@@ -198,6 +219,12 @@ class UnparseTestCase(ASTTestCase):
         self.check_ast_roundtrip("-1e1000")
         self.check_ast_roundtrip("1e1000j")
         self.check_ast_roundtrip("-1e1000j")
+
+    def test_nan(self):
+        self.assertASTEqual(
+            ast.parse(ast.unparse(ast.Constant(value=float('nan')))),
+            ast.parse('1e1000 - 1e1000')
+        )
 
     def test_min_int(self):
         self.check_ast_roundtrip(str(-(2 ** 31)))
@@ -251,6 +278,12 @@ class UnparseTestCase(ASTTestCase):
 
     def test_set_literal(self):
         self.check_ast_roundtrip("{'a', 'b', 'c'}")
+
+    def test_empty_set(self):
+        self.assertASTEqual(
+            ast.parse(ast.unparse(ast.Set(elts=[]))),
+            ast.parse('{*()}')
+        )
 
     def test_set_comprehension(self):
         self.check_ast_roundtrip("{x for x in range(5)}")
@@ -311,23 +344,18 @@ class UnparseTestCase(ASTTestCase):
     def test_invalid_raise(self):
         self.check_invalid(ast.Raise(exc=None, cause=ast.Name(id="X")))
 
-    def test_invalid_fstring_constant(self):
-        self.check_invalid(ast.JoinedStr(values=[ast.Constant(value=100)]))
-
-    def test_invalid_fstring_conversion(self):
+    def test_invalid_fstring_value(self):
         self.check_invalid(
-            ast.FormattedValue(
-                value=ast.Constant(value="a", kind=None),
-                conversion=ord("Y"),  # random character
-                format_spec=None,
+            ast.JoinedStr(
+                values=[
+                    ast.Name(id="test"),
+                    ast.Constant(value="test")
+                ]
             )
         )
 
     def test_invalid_fstring_backslash(self):
         self.check_invalid(ast.FormattedValue(value=ast.Constant(value="\\\\")))
-
-    def test_invalid_set(self):
-        self.check_invalid(ast.Set(elts=[]))
 
     def test_invalid_yield_from(self):
         self.check_invalid(ast.YieldFrom(value=None))
@@ -503,13 +531,25 @@ class CosmeticTestCase(ASTTestCase):
         self.check_src_roundtrip("a[1, 2]")
         self.check_src_roundtrip("a[(1, *a)]")
 
+    def test_lambda_parameters(self):
+        self.check_src_roundtrip("lambda: something")
+        self.check_src_roundtrip("four = lambda: 2 + 2")
+        self.check_src_roundtrip("lambda x: x * 2")
+        self.check_src_roundtrip("square = lambda n: n ** 2")
+        self.check_src_roundtrip("lambda x, y: x + y")
+        self.check_src_roundtrip("add = lambda x, y: x + y")
+        self.check_src_roundtrip("lambda x, y, /, z, q, *, u: None")
+        self.check_src_roundtrip("lambda x, *y, **z: None")
+
+
 class DirectoryTestCase(ASTTestCase):
     """Test roundtrip behaviour on all files in Lib and Lib/test."""
 
     lib_dir = pathlib.Path(__file__).parent / ".."
     test_directories = (lib_dir, lib_dir / "test")
     run_always_files = {"test_grammar.py", "test_syntax.py", "test_compile.py",
-                        "test_ast.py", "test_asdl_parser.py", "test_fstring.py"}
+                        "test_ast.py", "test_asdl_parser.py", "test_fstring.py",
+                        "test_patma.py"}
 
     _files_to_test = None
 
